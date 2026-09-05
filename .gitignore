@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.env
+*.egg-info/
+.coverage
+htmlcov/
+docs/loadtest_results.md.tmp

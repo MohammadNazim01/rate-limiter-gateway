@@ -1,0 +1,46 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  downstream_mock:
+    build: ./downstream_mock
+    ports:
+      - "9000:9000"
+    environment:
+      FLAKY_FAILURE_RATE: "0.5"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: development
+      REDIS_URL: redis://redis:6379/0
+      DOWNSTREAM_BASE_URL: http://downstream_mock:9000
+      JWT_SECRET: dev-secret-change-me
+    depends_on:
+      redis:
+        condition: service_healthy
+      downstream_mock:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+# To prove distribution later (Phase 6):
+#   docker compose up --scale gateway=3 --no-recreate
+# (needs a shared entry port removed/handled via a proxy — documented in docs/architecture.md when we get there)
