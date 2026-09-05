@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # Downstream service this gateway proxies to
     DOWNSTREAM_BASE_URL: str = "http://localhost:9000"
+    DOWNSTREAM_TIMEOUT_SECONDS: float = 5.0
 
     # Token bucket defaults (per-client, can later be made per-route/per-tier)
     RATE_LIMIT_CAPACITY: int = 20      # max burst tokens
