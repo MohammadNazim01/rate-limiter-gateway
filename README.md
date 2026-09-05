@@ -1,10 +1,13 @@
 # Distributed Rate Limiter / API Gateway
 
-**Status: Phase 6 done** (auth, token-bucket rate limiting, proxy/forwarding,
-circuit breaker, and multi-instance Docker verified — see
-`docs/phase6_distributed_proof.md`). Full README with architecture docs and
-load-test results gets written in Phase 9. See `docs/` for the project plan
-and phase evidence so far.
+![CI](https://github.com/MohammadNazim01/rate-limiter-gateway/actions/workflows/ci.yml/badge.svg)
+
+**Status: Phase 8 done** (auth, token-bucket rate limiting, proxy/forwarding,
+circuit breaker, multi-instance Docker, Locust load test, and CI all verified
+— see `docs/`). Full architecture write-up gets finished in Phase 9.
+
+- `docs/phase6_distributed_proof.md` — 3-instance shared-limit proof
+- `docs/loadtest_results.md` — real Locust p95/p99 numbers
 
 ## Local dev
 ```
