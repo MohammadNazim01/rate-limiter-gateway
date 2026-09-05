@@ -1,15 +1,11 @@
 import time
 
 import jwt
-from fastapi.testclient import TestClient
 
 from app.core.config import settings
-from app.main import app
-
-client = TestClient(app)
 
 
-def test_issue_token_returns_jwt():
+def test_issue_token_returns_jwt(client):
     resp = client.post("/auth/token", json={"client_id": "client_a"})
     assert resp.status_code == 200
     body = resp.json()
@@ -18,24 +14,24 @@ def test_issue_token_returns_jwt():
     assert len(body["access_token"].split(".")) == 3  # header.payload.signature
 
 
-def test_whoami_without_credentials_is_401():
+def test_whoami_without_credentials_is_401(client):
     resp = client.get("/whoami")
     assert resp.status_code == 401
 
 
-def test_whoami_with_valid_jwt_returns_client_id():
+def test_whoami_with_valid_jwt_returns_client_id(client):
     token = client.post("/auth/token", json={"client_id": "client_a"}).json()["access_token"]
     resp = client.get("/whoami", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     assert resp.json() == {"client_id": "client_a"}
 
 
-def test_whoami_with_malformed_jwt_is_401():
+def test_whoami_with_malformed_jwt_is_401(client):
     resp = client.get("/whoami", headers={"Authorization": "Bearer not-a-real-token"})
     assert resp.status_code == 401
 
 
-def test_whoami_with_expired_jwt_is_401():
+def test_whoami_with_expired_jwt_is_401(client):
     now = int(time.time())
     expired_payload = {"sub": "client_a", "iat": now - 1000, "exp": now - 1}
     expired_token = jwt.encode(
@@ -45,19 +41,19 @@ def test_whoami_with_expired_jwt_is_401():
     assert resp.status_code == 401
 
 
-def test_whoami_with_valid_api_key_returns_client_id():
+def test_whoami_with_valid_api_key_returns_client_id(client):
     # "demo-key-123:demo-client" is the default seeded in Settings.API_KEYS_RAW
     resp = client.get("/whoami", headers={"X-API-Key": "demo-key-123"})
     assert resp.status_code == 200
     assert resp.json() == {"client_id": "demo-client"}
 
 
-def test_whoami_with_invalid_api_key_is_401():
+def test_whoami_with_invalid_api_key_is_401(client):
     resp = client.get("/whoami", headers={"X-API-Key": "not-a-real-key"})
     assert resp.status_code == 401
 
 
-def test_jwt_takes_priority_when_both_credentials_present_but_jwt_is_invalid():
+def test_jwt_takes_priority_when_both_credentials_present_but_jwt_is_invalid(client):
     # If a Bearer token is present, it must be validated on its own terms —
     # an invalid JWT should not silently fall back to API-key auth.
     resp = client.get(
