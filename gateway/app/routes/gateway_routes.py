@@ -1,6 +1,8 @@
 import httpx
 from fastapi import APIRouter, Depends, Request, Response, status
 
+from app.circuit_breaker.breaker import CircuitBreaker
+from app.circuit_breaker.dependency import get_circuit_breaker
 from app.proxy.forwarder import DownstreamError, forward_request, get_http_client
 from app.ratelimit.dependency import enforce_rate_limit
 
@@ -28,11 +30,17 @@ def _strip_hop_by_hop(headers) -> dict[str, str]:
     return {k: v for k, v in headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS}
 
 
+def _with_rate_limit_headers(final: Response, response: Response) -> Response:
+    for k, v in response.headers.items():
+        final.headers[k] = v
+    return final
+
+
 @router.get("/whoami")
 async def whoami(client_id: str = Depends(enforce_rate_limit)) -> dict:
     """
     Diagnostic route: proves auth + rate limiting end-to-end without
-    involving the downstream service at all.
+    involving the downstream service (or the circuit breaker) at all.
     """
     return {"client_id": client_id}
 
@@ -47,13 +55,30 @@ async def proxy(
     response: Response,
     client_id: str = Depends(enforce_rate_limit),
     http_client: httpx.AsyncClient = Depends(get_http_client),
+    breaker: CircuitBreaker = Depends(get_circuit_breaker),
 ) -> Response:
     """
-    The actual gateway route: authenticate -> rate-limit -> forward to the
-    downstream service -> return its response. (Circuit breaker around the
-    forward_request call is added in Phase 5 — right now a downstream
-    failure just returns 503 directly.)
+    The full gateway pipeline: authenticate -> rate-limit -> circuit-breaker
+    check -> forward to downstream -> record the outcome -> return the
+    response.
+
+    A downstream response with status >= 500 counts as a breaker failure,
+    same as a connection error — a downstream that's up but returning 500s
+    is just as unhealthy from the gateway's point of view. A 4xx is treated
+    as the client's fault, not the downstream's, and does not count against
+    the breaker.
     """
+    check = await breaker.check()
+    if not check.allowed:
+        return _with_rate_limit_headers(
+            Response(
+                content='{"detail":"downstream circuit breaker is open"}',
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                media_type="application/json",
+            ),
+            response,
+        )
+
     body = await request.body()
 
     try:
@@ -66,16 +91,20 @@ async def proxy(
             http_client=http_client,
         )
     except DownstreamError:
-        final = Response(
-            content='{"detail":"downstream service unavailable"}',
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            media_type="application/json",
+        await breaker.record_failure()
+        return _with_rate_limit_headers(
+            Response(
+                content='{"detail":"downstream service unavailable"}',
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                media_type="application/json",
+            ),
+            response,
         )
-        # carry over the rate-limit headers enforce_rate_limit already set
-        # on the shared `response` object for this request
-        for k, v in response.headers.items():
-            final.headers[k] = v
-        return final
+
+    if downstream_response.status_code >= 500:
+        await breaker.record_failure()
+    else:
+        await breaker.record_success()
 
     final = Response(
         content=downstream_response.content,
@@ -83,6 +112,4 @@ async def proxy(
         headers=_strip_hop_by_hop(downstream_response.headers),
         media_type=downstream_response.headers.get("content-type"),
     )
-    for k, v in response.headers.items():
-        final.headers[k] = v
-    return final
+    return _with_rate_limit_headers(final, response)

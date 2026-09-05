@@ -2,6 +2,8 @@ import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 
+from app.circuit_breaker.breaker import CircuitBreaker
+from app.circuit_breaker.dependency import get_circuit_breaker
 from app.main import app
 from app.ratelimit.dependency import get_rate_limiter
 from app.ratelimit.token_bucket import TokenBucketRateLimiter
@@ -41,3 +43,21 @@ def default_rate_limiter():
     app.dependency_overrides[get_rate_limiter] = lambda: limiter
     yield
     app.dependency_overrides.pop(get_rate_limiter, None)
+
+
+@pytest.fixture(autouse=True)
+def default_circuit_breaker():
+    """
+    Every test gets a fresh, fakeredis-backed circuit breaker by default
+    (always CLOSED, never tripped), same reasoning as default_rate_limiter.
+    Tests that want to exercise real breaker state transitions (see
+    tests/integration/test_circuit_breaker.py) override this again with
+    their own low-threshold breaker.
+    """
+    fake_redis = fakeredis.FakeAsyncRedis(decode_responses=True)
+    breaker = CircuitBreaker(
+        name="test", failure_threshold=1000, cooldown_seconds=1000.0, redis_client=fake_redis
+    )
+    app.dependency_overrides[get_circuit_breaker] = lambda: breaker
+    yield
+    app.dependency_overrides.pop(get_circuit_breaker, None)
