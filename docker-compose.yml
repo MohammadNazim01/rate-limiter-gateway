@@ -24,7 +24,10 @@ services:
   gateway:
     build: ./gateway
     ports:
-      - "8000:8000"
+      - "8000"  # no fixed host port: needed so `--scale gateway=3` doesn't
+                # collide trying to bind :8000 three times. Docker assigns
+                # each replica its own host port; `docker compose port
+                # gateway <n>` (or `docker compose ps`) reveals it.
     environment:
       ENVIRONMENT: development
       REDIS_URL: redis://redis:6379/0
@@ -42,6 +45,8 @@ services:
       timeout: 3s
       retries: 5
 
-# To prove distribution later (Phase 6):
-#   docker compose up --scale gateway=3 --no-recreate
-# (needs a shared entry port removed/handled via a proxy — documented in docs/architecture.md when we get there)
+# To prove distributed rate limiting (Phase 6):
+#   docker compose up --build --scale gateway=3 -d
+#   docker compose port gateway 1   (repeat with 2, 3 for each replica's host port)
+# All 3 replicas share one Redis, so hitting the *same client* across all
+# 3 host ports must still enforce one combined limit, not 3x.
