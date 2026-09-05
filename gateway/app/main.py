@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core import redis_client
+from app.routes import auth_routes, gateway_routes
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gateway")
@@ -14,6 +15,9 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs" if settings.ENVIRONMENT == "development" else None,
 )
+
+app.include_router(auth_routes.router)
+app.include_router(gateway_routes.router)
 
 
 @app.get("/health/live", tags=["health"])

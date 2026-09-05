@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_SECONDS: int = 900  # 15 minutes — same reasoning as Boboloo's token lifetime
 
+    # API keys: simple demo lookup, format "key1:client1,key2:client2".
+    # Not a real key-management system on purpose — see Part 6 of the project plan.
+    API_KEYS_RAW: str = "demo-key-123:demo-client"
+
     # Downstream service this gateway proxies to
     DOWNSTREAM_BASE_URL: str = "http://localhost:9000"
 

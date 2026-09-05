@@ -30,6 +30,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       DOWNSTREAM_BASE_URL: http://downstream_mock:9000
       JWT_SECRET: dev-secret-change-me
+      API_KEYS_RAW: demo-key-123:demo-client
     depends_on:
       redis:
         condition: service_healthy
